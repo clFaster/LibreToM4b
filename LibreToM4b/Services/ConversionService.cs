@@ -118,7 +118,7 @@ public static class ConversionService
 
                         var preSpineDuration = book.Spine[..chapter.Spine].Sum(s => s.Duration);
                         var time = TimeSpan.FromSeconds(preSpineDuration + chapter.Offset);
-
+                        // todo: Fix time should be chapter duration
                         return (time, chapter.Title);
                     });
             var readOnlyMetaData = metaDataBuilder.Build();
