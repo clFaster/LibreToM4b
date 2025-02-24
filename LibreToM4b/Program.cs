@@ -1,7 +1,6 @@
-﻿// See https://aka.ms/new-console-template for more information
-
-using System.CommandLine;
+﻿using System.CommandLine;
+using LibreToM4b.Commands;
 
 var rootCommand = new RootCommand("LibreToM4b");
-rootCommand.AddCommand(new ConvertCommand());
+rootCommand.AddCommand(new ConversionCommand());
 return rootCommand.Invoke(args);
