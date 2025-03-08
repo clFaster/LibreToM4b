@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using FFMpegCore;
-using FFMpegCore.Arguments;
 using FFMpegCore.Builders.MetaData;
 using FFMpegCore.Enums;
 using FFMpegCore.Helpers;
@@ -14,32 +13,27 @@ namespace LibreToM4b.Services;
 
 public static class ConversionService
 {
-    public static async Task<Result> Convert(string input, string? output)
+    private static readonly JsonSerializerOptions SerializerOptions = new() { PropertyNameCaseInsensitive = true };
+    
+    public static async Task<Result> Convert(string inputDirectoryStr, string? outputDirectoryStr)
     {
         try
         {
             FFMpegHelper.VerifyFFMpegExists(new FFOptions());
             
             // Output dir
-            var outputDir = new DirectoryInfo(output is null ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "output") : Path.GetFullPath(output));
-            if (!outputDir.Exists)
-            {
-                outputDir.Create();
-            }
-            Console.WriteLine("Output folder:");
-            Console.WriteLine(outputDir.FullName);
-            
+            var outputDir = PrepareOutputDir(outputDirectoryStr);
+
             // Input folder
-            var inputFile = new DirectoryInfo(input);
-            if (!inputFile.Exists)
+            var inputDirectoryResult = CheckInputDir(inputDirectoryStr);
+            if(inputDirectoryResult.IsFailed)
             {
-                return Result.Fail($"Input folder {input} does not exist.");
+                return Result.Fail(inputDirectoryResult.Errors);;
             }
-            Console.WriteLine("Input folder:");
-            Console.WriteLine(inputFile.FullName);
-            
+            var inputDirectory = inputDirectoryResult.Value;
+
             // Get List of audio files in the input folder .mp3
-            var audioFiles = inputFile.GetFiles("*.mp3");
+            var audioFiles = inputDirectory.GetFiles("*.mp3");
             if (audioFiles.Length == 0)
             {
                 return Result.Fail("No audio files found in the input folder.");
@@ -51,45 +45,44 @@ public static class ConversionService
             Console.WriteLine("Bitrate detected: {0} kbps", mediaAnalysis.Format.BitRate / 1000);
             
             // Check if Metadata file found
-            var metadataFile = inputFile.GetFiles("metadata/metadata.json").FirstOrDefault();
-            var json = await metadataFile?.OpenText().ReadToEndAsync();
-            var serializerOptions = new JsonSerializerOptions
+            // Do not fail if metadata file is not found
+            FileInfo? metadataFile = null;
+            try
             {
-                PropertyNameCaseInsensitive = true
-            };
-            var book = JsonSerializer.Deserialize<Book>(json, serializerOptions);
-            if (book is null)
+                metadataFile = inputDirectory.GetFiles("metadata/metadata.json").FirstOrDefault();
+            }
+            catch(Exception e)
             {
-                Console.WriteLine("No metadata file found. Generating metadata from audio files.");
-                book = new Book
-                {
-                    Title = inputFile.Name,
-                    Description = new Description
-                    {
-                        Full = "No description"
-                    },
-                    Creators = [],
-                    Chapters = [
-                        new Chapter
-                        {
-                            Title = "Introduction",
-                            Spine = 0,
-                            Offset = 0
-                        }
-                    ]
-                };
+                Console.WriteLine("Metadata file not found.");
             }
             
-            // TODO Handle Chapter Info
+            var totalDuration = 
+                audioFiles
+                    .Select(f => FFProbe.AnalyseAsync(f.FullName).Result.Format.Duration)
+                    .Aggregate(TimeSpan.Zero, (sum, next) => sum + next);
+            
+            Book? book = null;
+            if (metadataFile is not null)
+            {
+                var json = await metadataFile.OpenText().ReadToEndAsync();
+                book = JsonSerializer.Deserialize<Book>(json, SerializerOptions);
+                if (book is not null)
+                {
+                    CalculateChapterDuration(book, totalDuration);
+                }
+            }
+            
+            if (book is null)
+            {
+                Console.WriteLine("Generating metadata from audio files.");
+                book = GenerateBookFromAudioFiles(audioFiles, mediaAnalysis.Format.Tags, totalDuration);
+            }
             
             // Concatenate FFMpegCore audio files and convert to m4b
             var concatInput = audioFiles.Select(f => f.FullName);
             
             // Total duration of all audio files
-            var totalDuration = 
-                audioFiles
-                    .Select(f => FFProbe.AnalyseAsync(f.FullName).Result.Format.Duration)
-                    .Aggregate(TimeSpan.Zero, (sum, next) => sum + next);
+            
 
             // Progress bar
             const int barWidth = 30;
@@ -109,18 +102,7 @@ public static class ConversionService
                 .WithComposers(book.Creators.FirstOrDefault(x => x.Role == "narrator")?.Name ?? "Unknown Narrator")
                 .WithGenres("Audiobook")
                 .AddChapters(book.Chapters,
-                    chapter =>
-                    {
-                        if (chapter.Spine < 0 || chapter.Spine >= book.Spine.Count)
-                        {
-                            return (TimeSpan.Zero, chapter.Title); // Default to zero time if invalid
-                        }
-
-                        var preSpineDuration = book.Spine[..chapter.Spine].Sum(s => s.Duration);
-                        var time = TimeSpan.FromSeconds(preSpineDuration + chapter.Offset);
-                        // todo: Fix time should be chapter duration
-                        return (time, chapter.Title);
-                    });
+                    chapter => (chapter.Duration, chapter.Title));
             var readOnlyMetaData = metaDataBuilder.Build();
             
             // FFMpeg conversion
@@ -136,7 +118,7 @@ public static class ConversionService
                     {
                         options
                             .WithAudioCodec(AudioCodec.Aac)
-                            .WithAudioBitrate((int)(mediaAnalysis.Format.BitRate / 1000))
+                            .WithAudioBitrate((int)(mediaAnalysis.Format.BitRate / 1000 ))
                             .WithFastStart();
                     })
                 .NotifyOnProgress(ProgressHandler, totalDuration)
@@ -151,6 +133,90 @@ public static class ConversionService
         
         
         return Result.Ok();
+    }
+
+    private static Book GenerateBookFromAudioFiles(FileInfo[] audioFiles, Dictionary<string, string>? tags,
+        TimeSpan totalDuration)
+    {
+        var book = new Book
+        {
+            Title = tags?.TryGetValue("album", out var album) == true ? album : "Unknown Audiobook",
+            Description = new Description
+            {
+                Full = tags?.TryGetValue("comment", out var comment) == true ? comment : string.Empty,
+                Short = tags?.TryGetValue("comment", out var shortComment) == true ? shortComment : string.Empty
+            },
+            CoverUrl = string.Empty,
+            Creators =
+            [
+                new Creator
+                {
+                    Name = tags?.TryGetValue("artist", out var artist) == true ? artist : "Unknown Author",
+                    Role = "author"
+                },
+
+                new Creator
+                {
+                    Name = tags?.TryGetValue("composer", out var composer) == true
+                        ? composer
+                        : (tags?.TryGetValue("album_artist", out var albumArtist) == true
+                            ? albumArtist
+                            : "Unknown Narrator"),
+                    Role = "narrator"
+                }
+            ],
+            Spine = audioFiles.Select(f => new Spine
+            {
+                Duration = totalDuration.TotalSeconds
+            }).ToList(),
+            Chapters = audioFiles.Select((f, i) => new Chapter
+            {
+                Title = tags?.TryGetValue("title", out var title) == true ? title : f.Name,
+                Duration = FFProbe.Analyse(f.FullName).Duration,
+                Spine = 0,
+                Offset = 0
+            }).ToList()
+        };
+
+        return book;
+
+    }
+
+    private static Result<DirectoryInfo> CheckInputDir(string inputDirectoryStr)
+    {
+        var inputDirectory = new DirectoryInfo(inputDirectoryStr);
+        if (!inputDirectory.Exists)
+        {
+            return Result.Fail($"Input folder {inputDirectoryStr} does not exist.");
+        }
+        Console.WriteLine("Input folder:");
+        Console.WriteLine(inputDirectory.FullName);
+        return inputDirectory;
+    }
+
+    private static DirectoryInfo PrepareOutputDir(string? outputDirectoryStr)
+    {
+        var outputDir = new DirectoryInfo(outputDirectoryStr is null ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "LibreToM4b") : Path.GetFullPath(outputDirectoryStr));
+        if (!outputDir.Exists)
+        {
+            outputDir.Create();
+        }
+        Console.WriteLine("Output folder:");
+        Console.WriteLine(outputDir.FullName);
+        return outputDir;
+    }
+
+    private static void CalculateChapterDuration(Book book, TimeSpan totalDuration)
+    {
+        for(var i = 0; i < book.Chapters.Count; i++)
+        {
+            var chapter = book.Chapters[i];
+            var nextChapter = i + 1 < book.Chapters.Count ? book.Chapters[i + 1] : null;
+            
+            var chapterStart = book.Spine[..chapter.Spine].Sum(s => s.Duration) + chapter.Offset;
+            var chapterEnd = nextChapter is not null ? book.Spine[..nextChapter.Spine].Sum(s => s.Duration) + nextChapter.Offset : totalDuration.TotalSeconds;
+            chapter.Duration = TimeSpan.FromSeconds(chapterEnd - chapterStart);
+        }
     }
 
     private static string GenerateChapterMetadata(Book? book)
