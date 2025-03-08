@@ -1,6 +1,4 @@
 ﻿using System.Diagnostics;
-using System.Globalization;
-using System.Text;
 using System.Text.Json;
 using FFMpegCore;
 using FFMpegCore.Builders.MetaData;
@@ -217,33 +215,5 @@ public static class ConversionService
             var chapterEnd = nextChapter is not null ? book.Spine[..nextChapter.Spine].Sum(s => s.Duration) + nextChapter.Offset : totalDuration.TotalSeconds;
             chapter.Duration = TimeSpan.FromSeconds(chapterEnd - chapterStart);
         }
-    }
-
-    private static string GenerateChapterMetadata(Book? book)
-    {
-        if (book?.Chapters == null || book.Chapters.Count == 0){
-            return "00:00:00 Introduction";
-        }
-
-        StringBuilder metadata = new();
-
-        foreach (var chapter in book.Chapters)
-        {
-            if (chapter.Spine < 0 || chapter.Spine >= book.Spine.Count)
-            {
-                continue;
-            }
-            
-            var preSpineDuration = book.Spine[..chapter.Spine].Sum(s => s.Duration);
-
-            // Convert cumulativeDuration (seconds) to HH:mm:ss format
-            var time = TimeSpan.FromSeconds(preSpineDuration + chapter.Offset);
-            var timestamp = time.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
-
-            // Append to metadata
-            metadata.AppendLine($"{timestamp} {chapter.Title}");
-        }
-
-        return metadata.ToString().TrimEnd();
     }
 }
