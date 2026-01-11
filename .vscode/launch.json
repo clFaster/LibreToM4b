@@ -1,0 +1,19 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch LibreToM4b: convert sample",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/LibreToM4b/bin/Debug/net9.0/LibreToM4b.dll",
+            "args": "convert \"InputFolder\"",
+            "cwd": "${workspaceFolder}/LibreToM4b",
+            "stopAtEntry": false,
+            "console": "integratedTerminal"
+        }
+    ]
+}
