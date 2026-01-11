@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 /// <summary>
 /// Represents an audiobook with its metadata and structure.
 /// </summary>
-public class Book
+public class LibreBook
 {
     [JsonPropertyName("title")]
     public string Title { get; set; } = string.Empty;
@@ -23,7 +23,7 @@ public class Book
     public List<Spine> Spine { get; set; } = [];
 
     [JsonPropertyName("chapters")]
-    public List<Chapter> Chapters { get; set; } = [];
+    public List<LibreChapter> Chapters { get; set; } = [];
 }
 
 /// <summary>
@@ -71,7 +71,7 @@ public class Spine
 /// <summary>
 /// Represents a chapter in the audiobook.
 /// </summary>
-public class Chapter
+public class LibreChapter
 {
     [JsonPropertyName("title")]
     public string Title { get; set; } = string.Empty;
