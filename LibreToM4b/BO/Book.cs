@@ -67,7 +67,7 @@ public class Chapter
 
     [JsonPropertyName("offset")]
     public int Offset { get; set; }
-    
+
     [JsonIgnore]
     public TimeSpan Duration { get; set; } = TimeSpan.Zero;
 }
