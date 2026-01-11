@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="LibreToM4b.Core/LibreToM4b.Core.csproj" />
+  <Project Path="LibreToM4b/LibreToM4b.csproj" />
+</Solution>

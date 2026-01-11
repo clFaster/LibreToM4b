@@ -13,7 +13,7 @@ A command-line tool to convert audiobooks downloaded with [LibreGrab](https://gi
 
 ## Prerequisites
 
-- [.NET 9.0 SDK](https://dotnet.microsoft.com/download/dotnet/9.0) or later
+- [.NET 10.0 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) or later
 - [FFmpeg](https://ffmpeg.org/download.html) installed and available in PATH
 
 ## Installation

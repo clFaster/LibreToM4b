@@ -82,7 +82,7 @@ public class ConversionService : IConversionService
             );
             var startingTimestamp = Stopwatch.GetTimestamp();
 
-            await ConvertToM4bAsync(
+            await ConvertToM4BAsync(
                 audioFiles,
                 book,
                 mediaAnalysis,
@@ -164,7 +164,7 @@ public class ConversionService : IConversionService
         return totalDuration;
     }
 
-    private async Task<Book> LoadOrGenerateBookMetadataAsync(
+    private async Task<LibreBook> LoadOrGenerateBookMetadataAsync(
         DirectoryInfo inputDirectory,
         FileInfo[] audioFiles,
         Dictionary<string, string>? tags,
@@ -200,7 +200,7 @@ public class ConversionService : IConversionService
         }
     }
 
-    private static async Task<Book?> LoadBookFromMetadataAsync(
+    private static async Task<LibreBook?> LoadBookFromMetadataAsync(
         FileInfo metadataFile,
         CancellationToken cancellationToken
     )
@@ -209,7 +209,7 @@ public class ConversionService : IConversionService
         {
             using var reader = metadataFile.OpenText();
             var json = await reader.ReadToEndAsync(cancellationToken);
-            return JsonSerializer.Deserialize<Book>(json, SerializerOptions);
+            return JsonSerializer.Deserialize<LibreBook>(json, SerializerOptions);
         }
         catch
         {
@@ -217,13 +217,13 @@ public class ConversionService : IConversionService
         }
     }
 
-    private static async Task<Book> GenerateBookFromAudioFilesAsync(
+    private static async Task<LibreBook> GenerateBookFromAudioFilesAsync(
         FileInfo[] audioFiles,
         Dictionary<string, string>? tags,
         CancellationToken cancellationToken
     )
     {
-        var chapters = new List<Chapter>();
+        var chapters = new List<LibreChapter>();
         foreach (var file in audioFiles)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -232,7 +232,7 @@ public class ConversionService : IConversionService
                 cancellationToken: cancellationToken
             );
             chapters.Add(
-                new Chapter
+                new LibreChapter
                 {
                     Title =
                         tags?.TryGetValue("title", out var title) == true
@@ -245,7 +245,7 @@ public class ConversionService : IConversionService
             );
         }
 
-        return new Book
+        return new LibreBook
         {
             Title = tags?.TryGetValue("album", out var album) == true ? album : "Unknown Audiobook",
             Description = new Description
@@ -286,25 +286,26 @@ public class ConversionService : IConversionService
         };
     }
 
-    private static void CalculateChapterDurations(Book book, TimeSpan totalDuration)
+    private static void CalculateChapterDurations(LibreBook libreBook, TimeSpan totalDuration)
     {
-        for (var i = 0; i < book.Chapters.Count; i++)
+        for (var i = 0; i < libreBook.Chapters.Count; i++)
         {
-            var chapter = book.Chapters[i];
-            var nextChapter = i + 1 < book.Chapters.Count ? book.Chapters[i + 1] : null;
+            var chapter = libreBook.Chapters[i];
+            var nextChapter = i + 1 < libreBook.Chapters.Count ? libreBook.Chapters[i + 1] : null;
 
-            var chapterStart = book.Spine.Take(chapter.Spine).Sum(s => s.Duration) + chapter.Offset;
+            var chapterStart =
+                libreBook.Spine.Take(chapter.Spine).Sum(s => s.Duration) + chapter.Offset;
             var chapterEnd = nextChapter is not null
-                ? book.Spine.Take(nextChapter.Spine).Sum(s => s.Duration) + nextChapter.Offset
+                ? libreBook.Spine.Take(nextChapter.Spine).Sum(s => s.Duration) + nextChapter.Offset
                 : totalDuration.TotalSeconds;
 
             chapter.Duration = TimeSpan.FromSeconds(chapterEnd - chapterStart);
         }
     }
 
-    private async Task ConvertToM4bAsync(
+    private async Task ConvertToM4BAsync(
         FileInfo[] audioFiles,
-        Book book,
+        LibreBook libreBook,
         IMediaAnalysis mediaAnalysis,
         string outputFileName,
         TimeSpan totalDuration,
@@ -315,17 +316,18 @@ public class ConversionService : IConversionService
 
         var metaDataBuilder = new MetaDataBuilder();
         metaDataBuilder
-            .WithAlbum(book.Title)
-            .WithTitle(book.Title)
-            .WithEntry("description", book.Description.Full)
+            .WithAlbum(libreBook.Title)
+            .WithTitle(libreBook.Title)
+            .WithEntry("description", libreBook.Description.Full)
             .WithArtists(
-                book.Creators.FirstOrDefault(x => x.Role == "author")?.Name ?? "Unknown Author"
+                libreBook.Creators.FirstOrDefault(x => x.Role == "author")?.Name ?? "Unknown Author"
             )
             .WithComposers(
-                book.Creators.FirstOrDefault(x => x.Role == "narrator")?.Name ?? "Unknown Narrator"
+                libreBook.Creators.FirstOrDefault(x => x.Role == "narrator")?.Name
+                    ?? "Unknown Narrator"
             )
             .WithGenres("Audiobook")
-            .AddChapters(book.Chapters, chapter => (chapter.Duration, chapter.Title));
+            .AddChapters(libreBook.Chapters, chapter => (chapter.Duration, chapter.Title));
 
         var readOnlyMetaData = metaDataBuilder.Build();
 

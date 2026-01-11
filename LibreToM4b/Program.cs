@@ -2,5 +2,5 @@
 using LibreToM4b.Commands;
 
 var rootCommand = new RootCommand("LibreToM4b");
-rootCommand.AddCommand(new ConversionCommand());
-return rootCommand.Invoke(args);
+rootCommand.Subcommands.Add(new ConversionCommand());
+return await rootCommand.Parse(args).InvokeAsync();

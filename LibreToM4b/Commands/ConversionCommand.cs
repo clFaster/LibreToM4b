@@ -11,37 +11,40 @@ public class ConversionCommand : Command
     public ConversionCommand()
         : base("convert", "Convert LibreOffice files to m4b")
     {
-        var outputFolder = new Option<string?>(["--output", "-o"], "The output folder")
+        var outputFolder = new Option<string?>("--output")
         {
-            IsRequired = false,
+            Description = "Output folder for the converted files",
+        };
+        outputFolder.Aliases.Add("-o");
+
+        var inputFolder = new Argument<string>("input-folder")
+        {
+            Description = "Input folder containing LibreOffice files",
         };
 
-        var inputFolder = new Argument<string>("input-folder", "The input folder");
+        Add(outputFolder);
+        Add(inputFolder);
 
-        AddOption(outputFolder);
-        AddArgument(inputFolder);
-
-        this.SetHandler(
-            async (output, input) =>
+        SetAction(
+            async (parseResult, _) =>
             {
                 IProgressReporter progressReporter = new ConsoleProgressReporter();
                 IConversionService conversionService = new ConversionService(progressReporter);
 
                 var options = new ConversionOptions
                 {
-                    InputDirectory = input,
-                    OutputDirectory = output,
+                    InputDirectory = parseResult.GetValue(inputFolder)!,
+                    OutputDirectory = parseResult.GetValue(outputFolder),
                 };
 
                 var result = await conversionService.ConvertAsync(options);
                 if (result.IsFailed)
                 {
-                    Console.Error.WriteLine(result.Errors.First().Message);
-                    Environment.Exit(1);
+                    await Console.Error.WriteLineAsync(result.Errors[0].Message);
+                    return 1;
                 }
-            },
-            outputFolder,
-            inputFolder
+                return 0;
+            }
         );
     }
 }
