@@ -7,8 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="FFMpegCore" Version="5.1.0" />
-    <PackageReference Include="FluentResults" Version="3.16.0" />
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LibreToM4b.Core\LibreToM4b.Core.csproj" />
   </ItemGroup>
 </Project>
