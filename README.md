@@ -4,7 +4,7 @@ A command-line tool to convert audiobooks downloaded with [LibreGrab](https://gi
 
 ## Features
 
-- **MP3 to M4B Conversion**: Concatenates multiple MP3 files into a single M4B audiobook file
+- **Multi-Format to M4B Conversion**: Concatenates supported audio files (`.mp3`, `.m4a`, `.aac`, `.flac`, `.wav`, `.ogg`, `.opus`, `.wma`, `.ts`) into a single M4B audiobook file
 - **Automatic Chapter Detection**: Parses LibreGrab metadata to preserve chapter markers
 - **Metadata Preservation**: Extracts and embeds title, author, narrator, and description
 - **Fallback Metadata**: Generates metadata from ID3 tags when LibreGrab metadata is unavailable
@@ -45,7 +45,7 @@ LibreToM4b convert <input-folder> -o <output-folder>
 
 | Argument | Description |
 |----------|-------------|
-| `input-folder` | Path to the folder containing MP3 files from LibreGrab |
+| `input-folder` | Path to the folder containing supported audio files from LibreGrab |
 
 ### Options
 
@@ -60,7 +60,7 @@ The input folder should contain:
 ```
 audiobook-folder/
 ├── 001.mp3
-├── 002.mp3
+├── 002.ts
 ├── ...
 └── metadata/
     └── metadata.json    (optional - LibreGrab metadata)

@@ -9,7 +9,7 @@ namespace LibreToM4b.Commands;
 public class ConversionCommand : Command
 {
     public ConversionCommand()
-        : base("convert", "Convert LibreOffice files to m4b")
+        : base("convert", "Convert audio files to m4b")
     {
         var outputFolder = new Option<string?>("--output")
         {
@@ -19,7 +19,7 @@ public class ConversionCommand : Command
 
         var inputFolder = new Argument<string>("input-folder")
         {
-            Description = "Input folder containing LibreOffice files",
+            Description = "Input folder containing supported audio files",
         };
 
         Add(outputFolder);

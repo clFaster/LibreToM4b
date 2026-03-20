@@ -15,6 +15,19 @@ namespace LibreToM4b.Core.Services;
 /// </summary>
 public class ConversionService : IConversionService
 {
+    private static readonly string[] SupportedAudioExtensions =
+    [
+        ".mp3",
+        ".m4a",
+        ".aac",
+        ".flac",
+        ".wav",
+        ".ogg",
+        ".opus",
+        ".wma",
+        ".ts",
+    ];
+
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -63,8 +76,9 @@ public class ConversionService : IConversionService
                 audioFiles[0].FullName,
                 cancellationToken: cancellationToken
             );
+            var audioBitrateKbps = ResolveAudioBitrateKbps(mediaAnalysis);
             _progressReporter.LogInfo(
-                $"Bitrate detected: {mediaAnalysis.Format.BitRate / 1000} kbps"
+                $"Audio bitrate detected: {audioBitrateKbps} kbps"
             );
 
             var totalDuration = await CalculateTotalDurationAsync(audioFiles, cancellationToken);
@@ -85,7 +99,7 @@ public class ConversionService : IConversionService
             await ConvertToM4BAsync(
                 audioFiles,
                 book,
-                mediaAnalysis,
+                audioBitrateKbps,
                 outputFileName,
                 totalDuration,
                 cancellationToken
@@ -143,7 +157,13 @@ public class ConversionService : IConversionService
 
     private static FileInfo[] GetAudioFiles(DirectoryInfo inputDirectory)
     {
-        return inputDirectory.GetFiles("*.mp3");
+        return inputDirectory
+            .GetFiles()
+            .Where(file =>
+                SupportedAudioExtensions.Contains(file.Extension, StringComparer.OrdinalIgnoreCase)
+            )
+            .OrderBy(file => file.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static async Task<TimeSpan> CalculateTotalDurationAsync(
@@ -306,7 +326,7 @@ public class ConversionService : IConversionService
     private async Task ConvertToM4BAsync(
         FileInfo[] audioFiles,
         LibreBook libreBook,
-        IMediaAnalysis mediaAnalysis,
+        int audioBitrateKbps,
         string outputFileName,
         TimeSpan totalDuration,
         CancellationToken cancellationToken
@@ -341,13 +361,37 @@ public class ConversionService : IConversionService
                 {
                     options
                         .WithAudioCodec(AudioCodec.Aac)
-                        .WithAudioBitrate((int)(mediaAnalysis.Format.BitRate / 1000))
+                        .WithAudioBitrate(audioBitrateKbps)
                         .WithFastStart();
                 }
             )
             .NotifyOnProgress(progress => _progressReporter.ReportProgress(progress), totalDuration)
             .CancellableThrough(cancellationToken)
             .ProcessAsynchronously();
+    }
+
+    private static int ResolveAudioBitrateKbps(IMediaAnalysis mediaAnalysis)
+    {
+        var primaryAudioBitrate = mediaAnalysis.PrimaryAudioStream?.BitRate ?? 0;
+        if (primaryAudioBitrate > 0)
+        {
+            return (int)Math.Round(primaryAudioBitrate / 1000d, MidpointRounding.AwayFromZero);
+        }
+
+        var firstAudioBitrate = mediaAnalysis.AudioStreams
+            .Select(stream => stream.BitRate)
+            .FirstOrDefault(bitRate => bitRate > 0);
+        if (firstAudioBitrate > 0)
+        {
+            return (int)Math.Round(firstAudioBitrate / 1000d, MidpointRounding.AwayFromZero);
+        }
+
+        if (mediaAnalysis.Format.BitRate > 0)
+        {
+            return (int)Math.Round(mediaAnalysis.Format.BitRate / 1000d, MidpointRounding.AwayFromZero);
+        }
+
+        return 128;
     }
 
     private static string SanitizeFileName(string fileName)
